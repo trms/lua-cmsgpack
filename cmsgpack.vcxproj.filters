@@ -15,13 +15,8 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\lua_cmsgpack.c">
+    <ClCompile Include="lua_cmsgpack.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="src\init.lua">
-      <Filter>Source Files</Filter>
-    </None>
   </ItemGroup>
 </Project>
