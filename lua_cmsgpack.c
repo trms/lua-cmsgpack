@@ -702,7 +702,7 @@ static const struct luaL_reg thislib[] = {
 };
 
 LUALIB_API int luaopen_cmsgpack (lua_State *L) {
-#if LUA_VERSION_NUM == 502
+#if ((LUA_VERSION_NUM == 502) || (LUA_VERSION_NUM == 503))
     luaL_newlib(L, thislib);
 #else
     luaL_register(L, "cmsgpack", thislib);
