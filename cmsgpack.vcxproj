@@ -21,6 +21,9 @@
   <ItemGroup>
     <ClCompile Include="lua_cmsgpack.c" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{8A71E637-11A7-413B-B2F8-A25AA1A56520}</ProjectGuid>
     <RootNamespace>cmsgpack</RootNamespace>
@@ -113,11 +116,15 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
+    <Import Project="packages\lua.redist.5.3\build\native\lua.redist.targets" Condition="Exists('packages\lua.redist.5.3\build\native\lua.redist.targets')" />
+    <Import Project="packages\lua.5.3\build\native\lua.targets" Condition="Exists('packages\lua.5.3\build\native\lua.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('$(SolutionDir)\.nuget\NuGet.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\.nuget\NuGet.targets'))" />
+    <Error Condition="!Exists('packages\lua.redist.5.3\build\native\lua.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\lua.redist.5.3\build\native\lua.redist.targets'))" />
+    <Error Condition="!Exists('packages\lua.5.3\build\native\lua.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\lua.5.3\build\native\lua.targets'))" />
   </Target>
 </Project>
