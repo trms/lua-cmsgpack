@@ -7,7 +7,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 
-#define LUACMSGPACK_VERSION     "lua-cmsgpack 0.3.0"
+#define LUACMSGPACK_VERSION     "lua-cmsgpack 0.3.1"
 #define LUACMSGPACK_COPYRIGHT   "Copyright (C) 2012, Salvatore Sanfilippo"
 #define LUACMSGPACK_DESCRIPTION "MessagePack C implementation for Lua"
 
@@ -29,6 +29,7 @@
  * 20-Feb-2012 (ver 0.2.0): Tables encoding improved.
  * 20-Feb-2012 (ver 0.2.1): Minor bug fixing.
  * 20-Feb-2012 (ver 0.3.0): Module renamed lua-cmsgpack (was lua-msgpack).
+ * 04-Apr-2014 (ver 0.3.1): Lua 5.2 support and minor bug fix.
  * ============================================================================ */
 
 /* --------------------------- Endian conversion --------------------------------
@@ -137,6 +138,45 @@ static void mp_cur_free(mp_cur *cursor) {
 } while(0)
 
 /* --------------------------- Low level MP encoding -------------------------- */
+
+static void mp_encode_null(mp_buf* buf) {
+	unsigned char b[1];
+
+	b[0] = 0xc0;
+	mp_buf_append(buf,b,1);
+}
+
+static void mp_encode_binary(mp_buf *buf, const unsigned char *s, size_t len) {
+	unsigned char hdr[5];
+	int hdrlen = 0;
+	
+	if (len < 255) {
+		// 2^8-1
+		hdr[0] = 0xc4;
+		hdr[1] = len;
+		hdrlen = 2;
+	} else if (len < 65535) {
+		// 2^16-1
+		hdr[0] = 0xc5;
+		hdr[1] = (len&0xff00)>>8;
+		hdr[2] = len&0xff;
+		hdrlen = 3;
+	} else if (len < 4294967295) {
+		// 2^32-1
+		hdr[0] = 0xc6;
+		hdr[1] = (len&0xff000000)>>24;
+		hdr[2] = (len&0xff0000)>>16;
+		hdr[3] = (len&0xff00)>>8;
+		hdr[4] = len&0xff;
+		hdrlen = 5;
+	} else
+		mp_encode_null(buf);
+	
+	if (hdrlen>0) {
+		mp_buf_append(buf,hdr,hdrlen);
+		mp_buf_append(buf,s,len);
+	}
+}
 
 static void mp_encode_bytes(mp_buf *buf, const unsigned char *s, size_t len) {
     unsigned char hdr[5];
@@ -326,12 +366,51 @@ static void mp_encode_lua_number(lua_State *L, mp_buf *buf) {
 
 static void mp_encode_lua_type(lua_State *L, mp_buf *buf, int level);
 
+static void mp_encode_lua_userdata(lua_State *L, mp_buf *buf, int level) {
+	size_t size;
+	const unsigned char* pod;
+	
+	// here I expect the ud to have a metatable with __len defined
+	lua_len(L, -1);
+	size = lua_tointeger(L, -1) ;
+	lua_pop(L, 1);
+	// plain old data buffer is at index [1]
+	lua_pushinteger(L, 1);
+	lua_gettable(L ,-2);
+	pod = (const unsigned char*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	// encode null if the size is undefined, meaning the ud won't be packed
+	if (size>0)
+		mp_encode_binary(buf, pod, size);
+	else
+		mp_encode_null(buf);
+}
+
+static void mp_encode_lua_table_as_lightuserdata(lua_State *L, mp_buf *buf) {
+
+	size_t len;
+	const char* pv;
+	
+	// we're getting {[1]=lud, [2]=size}
+	lua_pushinteger(L, 1);
+	lua_gettable(L, -2);
+
+	pv = (const char*)lua_touserdata(L, -1);
+	
+	lua_pushinteger(L, 2);
+	lua_gettable(L, -2);
+	len = lua_tointeger(L, -1);
+	lua_pop(L, 2);
+
+	mp_encode_binary(buf, pv, len);
+}
+
 /* Convert a lua table into a message pack list. */
 static void mp_encode_lua_table_as_array(lua_State *L, mp_buf *buf, int level) {
-#if LUA_VERSION_NUM == 502
-    size_t len = lua_rawlen(L,-1), j;
-#else
+#if LUA_VERSION_NUM < 502
     size_t len = lua_objlen(L,-1), j;
+#else
+    size_t len = lua_rawlen(L,-1), j;
 #endif
 
     mp_encode_array(buf,len);
@@ -344,7 +423,7 @@ static void mp_encode_lua_table_as_array(lua_State *L, mp_buf *buf, int level) {
 
 /* Convert a lua table into a message pack key-value map. */
 static void mp_encode_lua_table_as_map(lua_State *L, mp_buf *buf, int level) {
-    size_t len = 0;
+	size_t len = 0;
 
     /* First step: count keys into table. No other way to do it with the
      * Lua API, we need to iterate a first time. Note that an alternative
@@ -371,7 +450,7 @@ static void mp_encode_lua_table_as_map(lua_State *L, mp_buf *buf, int level) {
  * of keys from numerical keys from 1 up to N, with N being the total number
  * of elements, without any hole in the middle. */
 static int table_is_an_array(lua_State *L) {
-    long count = 0, max = 0, idx = 0;
+    long count = 0, idx = 0;
     lua_Number n;
 
     lua_pushnil(L);
@@ -383,7 +462,6 @@ static int table_is_an_array(lua_State *L) {
         idx = n;
         if (idx != n || idx < 1) goto not_array;
         count++;
-        max = idx;
     }
     /* We have the total number of elements in "count". Also we have
      * the max index encountered in "idx". We can't reach this code
@@ -401,17 +479,32 @@ not_array:
  * an object at key '1', we serialize to message pack list. Otherwise
  * we use a map. */
 static void mp_encode_lua_table(lua_State *L, mp_buf *buf, int level) {
-    if (table_is_an_array(L))
+    if (table_is_an_array(L)) {
+		int aiType[2];
+		// lightuserdata values are encoded as binaries, provided they are presented inside a table along with their size value
+		// ex: {[1]=lud, [2]=size}
+		// [1]
+		lua_pushinteger(L, 1);
+		lua_gettable(L, -2);
+		aiType[0] = lua_type(L, -1);
+		lua_pop(L, 1);
+		// [2]
+		lua_pushinteger(L, 2);
+		lua_gettable(L, -2);
+		aiType[1] = lua_type(L, -1);
+		lua_pop(L, 1);
+
+		if ((aiType[0]==LUA_TLIGHTUSERDATA) && (aiType[1]==LUA_TNUMBER))
+			mp_encode_lua_table_as_lightuserdata(L, buf);
+		else
         mp_encode_lua_table_as_array(L,buf,level);
+	 }
     else
         mp_encode_lua_table_as_map(L,buf,level);
 }
 
 static void mp_encode_lua_null(lua_State *L, mp_buf *buf) {
-    unsigned char b[1];
-
-    b[0] = 0xc0;
-    mp_buf_append(buf,b,1);
+	mp_encode_null(buf);
 }
 
 static void mp_encode_lua_type(lua_State *L, mp_buf *buf, int level) {
@@ -425,6 +518,7 @@ static void mp_encode_lua_type(lua_State *L, mp_buf *buf, int level) {
     case LUA_TBOOLEAN: mp_encode_lua_bool(L,buf); break;
     case LUA_TNUMBER: mp_encode_lua_number(L,buf); break;
     case LUA_TTABLE: mp_encode_lua_table(L,buf,level); break;
+	 case LUA_TUSERDATA: mp_encode_lua_userdata(L, buf, level); break;
     default: mp_encode_lua_null(L,buf); break;
     }
     lua_pop(L,1);
@@ -464,6 +558,84 @@ void mp_decode_to_lua_hash(lua_State *L, mp_cur *c, size_t len) {
         if (c->err) return;
         lua_settable(L,-3);
     }
+}
+
+typedef struct {
+	char* pod;
+	size_t len;
+} userdatapod;
+
+static int userdatapod_gc(lua_State* L) {
+	userdatapod *pudpod = (userdatapod*)lua_touserdata(L, -1);
+	if ((pudpod != NULL) && (pudpod->pod != NULL)) {
+		free(pudpod->pod);
+		pudpod->len = 0;
+		pudpod->pod = NULL;
+	}
+	return 0;
+}
+
+static int userdatapod_len(lua_State* L) {
+	userdatapod *pudpod = (userdatapod*)lua_touserdata(L, -1);
+	// return the number of bytes
+	lua_pushinteger(L, pudpod->len);
+	return 1;
+}
+
+static void alloc_userdata(lua_State* L, const void* in_pod, const size_t in_size) {
+	userdatapod *pudpod;
+	// plain old data, allocated in this process space, must be explicitly freed or it will leak
+	// the ud represents a place holder for the memory address and its size
+	// the ud.__gc will delete the memory pointed to by the address
+	// ud.__len is defined, it returns the number of bytes pointed to by the ud address
+	// NOTE: I also define the # operator, which will return the pod size in bytes
+	pudpod = (userdatapod*)lua_newuserdata(L, sizeof(userdatapod));
+	pudpod->len = in_size;
+	// alloc the memory
+	pudpod->pod = (char*)malloc(pudpod->len);
+	// copy the data
+	memcpy(pudpod->pod, in_pod, in_size);
+	// create a mt
+	luaL_newmetatable(L, "userdatapod");
+	// garbage collector
+	lua_pushstring(L, "__gc");
+	lua_pushcfunction(L, userdatapod_gc);
+	lua_settable(L, -3);
+	// # operator
+	lua_pushstring(L, "__len");
+	lua_pushcfunction(L, userdatapod_len);
+	lua_settable(L, -3);
+	// [1]=data
+	lua_pushinteger(L, 1);
+	lua_pushlightuserdata(L, pudpod->pod);
+	lua_settable(L, -3);
+	// [2]=len
+	lua_pushinteger(L, 2);
+	lua_pushinteger(L, pudpod->len);
+	lua_settable(L, -3);
+	// set the mt
+	lua_setmetatable(L, -2);
+}
+
+void alloc_lightuserdata_table(lua_State* L, const void* in_pod, const size_t in_size) {
+	char* pod;
+
+	// plain old data, allocated in this process space, must be explicitly freed or it will leak
+	// format for lightuserdata POD packing is {lud, size}
+	// NOTE: I could use userdata and define a __gc... but that would put the ownership in lua's hands
+	lua_newtable(L);
+	lua_pushinteger(L, 1);
+	// allocate the memory
+	pod = (char*)malloc(in_size);
+	// copy the data
+	memcpy(pod, in_pod, in_size);
+	// give lua the address
+	lua_pushlightuserdata(L, pod);
+	lua_settable(L, -3);
+	// it needs the size too
+	lua_pushinteger(L, 2);
+	lua_pushinteger(L, in_size);
+	lua_settable(L, -3);
 }
 
 /* Decode a Message Pack raw object pointed by the string cursor 'c' to
@@ -632,6 +804,33 @@ void mp_decode_to_lua_type(lua_State *L, mp_cur *c) {
             mp_decode_to_lua_hash(L,c,l);
         }
         break;
+	 case 0xc4: /* bin 8 */
+		 mp_cur_need(c,2);
+		 {
+			 const size_t l = c->p[1];
+			 mp_cur_need(c,2+l);
+			 alloc_userdata(L, c->p+2, l);
+			 mp_cur_consume(c,2+l);
+		 }
+		 break;
+	 case 0xc5: /* bin 16 */
+		 mp_cur_need(c,3);
+		 {
+			 const size_t l = (c->p[1]<<8) | c->p[2];
+			 mp_cur_need(c,3+l);
+			 alloc_userdata(L, c->p+3, l);
+			 mp_cur_consume(c,3+l);
+		 }
+		 break;
+	 case 0xc6: /* bin 32 */
+		 mp_cur_need(c,5);
+		 {
+			const size_t l = (c->p[1] << 24) | (c->p[2] << 16) | (c->p[3] << 8) | c->p[4];
+			mp_cur_need(c,5+l);
+			alloc_userdata(L, c->p+5, l);
+			mp_cur_consume(c,5+l);
+		 }
+		 break;
     default:    /* types that can't be idenitified by first byte value. */
         if ((c->p[0] & 0x80) == 0) {   /* positive fixnum */
             lua_pushnumber(L,c->p[0]);
@@ -684,28 +883,29 @@ static int mp_unpack(lua_State *L) {
         mp_cur_free(c);
         lua_pushstring(L,"Extra bytes in input.");
         lua_error(L);
+    } else {
+        mp_cur_free(c);
     }
-    mp_cur_free(c);
     return 1;
 }
 
 /* ---------------------------------------------------------------------------- */
 
-#if LUA_VERSION_NUM == 502
-static const struct luaL_Reg thislib[] = {
-#else
+#if LUA_VERSION_NUM < 502
 static const struct luaL_reg thislib[] = {
+#else
+static const struct luaL_Reg thislib[] = {
 #endif
     {"pack", mp_pack},
     {"unpack", mp_unpack},
     {NULL, NULL}
 };
 
-LUALIB_API int luaopen_cmsgpack (lua_State *L) {
-#if ((LUA_VERSION_NUM == 502) || (LUA_VERSION_NUM == 503))
-    luaL_newlib(L, thislib);
-#else
+LUALIB_API int luaopen_cmsgpack_core(lua_State *L) {
+#if LUA_VERSION_NUM < 502
     luaL_register(L, "cmsgpack", thislib);
+#else
+    luaL_newlib(L, thislib);
 #endif
 
     lua_pushliteral(L, LUACMSGPACK_VERSION);
