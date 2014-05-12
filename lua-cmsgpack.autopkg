@@ -1,0 +1,32 @@
+nuget {
+	nuspec {
+		id = lua-cmsgpack;
+		title: lua-cmsgpack - nanomsg module for Lua;
+		version: 0.3.2.1;
+		authors: {coapp, Salvatore Sanfilippo, Christian Bechette, Tightrope Media Systems};
+		owners: {Tightrope Media Systems};
+		licenseUrl: "http://opensource.org/licenses/MIT";
+		releaseNotes: {@"Includes changes to support userdata."}; 
+		requireLicenseAcceptance:false;
+		summary: "A self contained Lua MessagePack C implementation.";
+		copyright: "Copyright (C) 2012 Salvatore Sanfilippo.  All rights reserved.";
+		tags: {native, Lua, module, msgpack};
+		description: {
+@"Lua-cmsgpack is a MessagePack implementation and bindings for Lua 5.1/5.2 in a self contained C file without external dependencies.";}
+	};
+
+	
+	files {
+		docs : {
+			#destination = ${d_docs}\lua-cmsgpack\;
+			.\*.md
+		};
+		[x64, v100]
+        	bin: {
+        		x64\Release\*.dll
+        	};
+        	pdb: x64\Release\*.pdb;
+        [win32, v100]
+        	bin: {Win32\Release\*.dll};
+    }
+}
