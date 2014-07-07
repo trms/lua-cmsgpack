@@ -120,4 +120,11 @@
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\lua.5.3.0003.02\build\native\lua.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\lua.5.3.0003.02\build\native\lua.props'))" />
+    <Error Condition="!Exists('packages\lua.5.3.0003.02\build\native\lua.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\lua.5.3.0003.02\build\native\lua.targets'))" />
+  </Target>
 </Project>
