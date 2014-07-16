@@ -2,8 +2,8 @@ nuget {
 	nuspec {
 		id = lua-cmsgpack;
 		title: lua-cmsgpack - nanomsg module for Lua;
-		version: 0.3.2.9;
-		authors: {coapp, Salvatore Sanfilippo, Christian Bechette, Tightrope Media Systems};
+		version: 0.3.2.12;
+		authors: {coapp, Salvatore Sanfilippo, Tightrope Media Systems};
 		owners: {Tightrope Media Systems};
 		licenseUrl: "http://opensource.org/licenses/MIT";
 		releaseNotes: {"Includes changes to support userdata. Updated to Work 3"}; 
@@ -29,14 +29,61 @@ nuget {
 			#destination = {"${d_docs}\lua-cmsgpack"};
 			{".\*.md"};
 		};
-
-		[x64, v100] {
-        	bin: {"x64\Release\*.dll"};
-        	//pdb: {x64\Release\*.pdb};
+		
+		mypdb: { 
+            // copies the whole folder tree.
+            #add-all-files : Items.msgpPdb;
+            // set the destination in the package itself. 
+			#destination : ${build_root}\${conditionFolder}\pdbs;
         };
-        [win32, v100]{
-        	bin: {"Win32\Release\*.dll"};
-        	//pdb: {"Win32\Release\*.pdb"};
+		
+		spec: {
+			// copies the whole folder tree.
+			#add-all-files : Items.msgpSpec;
+			// set the destination in the package itself. 
+			#destination : ${build_root}\${conditionFolder}\spec;
+		};
+
+		[x64, v100, Release] {
+        	bin: {"x64\Release\cmsgpack.dll"};
+			mypdb: {"x64\Release\cmsgpack.pdb"};
+			spec: {"spec\*.lua"}
+        };
+		
+		[x64, v100, Debug] {
+        	bin: {"x64\Debug\cmsgpack.dll"};
+        	mypdb: {x64\Debug\cmsgpack.pdb};
+			spec: {"spec\*.lua"}
+        };
+		
+        [win32, v100, Release] {
+        	bin: {"Win32\Release\cmsgpack.dll"};
+        	mypdb: {"Win32\Release\cmsgpack.pdb"};
+			spec: {"spec\*.lua"}
+        }
+		
+		[win32, v100, Debug] {
+        	bin: {"Win32\Debug\cmsgpack.dll"};
+        	mypdb: {"Win32\Debug\cmsgpack.pdb"};
+			spec: {"spec\*.lua"}
         }
     };
+	targets {
+		AfterBuild {
+			.Copy {
+				DestinationFiles = "@(msgpSpec->'$(TargetDir)spec\%(RecursiveDir)%(Filename)%(Extension)')";
+				SourceFiles = "@(msgpSpec)";
+				SkipUnchangedFiles = true;
+				UseHardlinksIfPossible = true;
+			};
+		};
+		AfterBuild {
+			.Copy {
+				DestinationFolder = "$(TargetDir)";
+				SourceFiles = "@(msgpPdb)";
+				SkipUnchangedFiles = true;
+				UseHardlinksIfPossible = true;
+			};
+		};
+	}	
 }

@@ -25,10 +25,8 @@
   <ItemGroup>
     <None Include="lua-cmsgpack.autopkg" />
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="core_msg.lua">
+    <None Include="spec\core_msgpack.lua">
       <Filter>spec</Filter>
-    </CustomBuild>
+    </None>
   </ItemGroup>
 </Project>

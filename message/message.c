@@ -127,7 +127,9 @@ int l_len(lua_State* L)
 int l_setsize(lua_State* L)
 {
    // stash the size
-   setudlen(L, 1, luaL_checkinteger(L, 2));
+   setudlen(L, 1, (size_t)luaL_checkinteger(L, 2));
+   lua_settop(L, 1);
+   return 1;
 }
 
 int l_message(lua_State* L)

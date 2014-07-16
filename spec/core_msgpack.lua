@@ -1,10 +1,18 @@
-local msgpack, ret_str, test_table, ret_table, msg_start_index, messagelib, msg_ud
+local msgpack, ret_str, test_table, ret_table, msg_start_index, new_message, msg_ud
 
 describe ("msg_mspack operation #msg_mspack", function()
 	setup(function()
 		msgpack = require'cmsgpack'
-		messagelib = require'message'
-		
+
+		if pcall(require, "message") then
+			print"using message test module"
+			new_message = require'message'.message
+			assert.are_equal(false, pcall(require, "nml")) -- if nml is available I want to test it
+		elseif pcall(require, "nml") then
+			print"using nml module"
+			new_message = require'nml'.core.nml_msg
+		end
+		assert.is_truthy(new_message)
 		test_table = {"Hello,", "world", "!"}
 	end)
 
@@ -36,20 +44,19 @@ describe ("msg_mspack operation #msg_mspack", function()
 	end)
 
 	it("given a table and a message userdata, it can populate the message and return the same userdata object, but with the buffer filled in.", function()
-		msg_ud = messagelib.message()
+		msg_ud = new_message()
 		assert.is_truthy(msg_ud)
 		assert.are_equal("userdata", type(msg_ud))
 
 		-- this will call realloc on the message's metatable
 		local ret_ud = msgpack.packmessage(msg_ud, test_table)
-		print(type(ret_ud))
 		assert.are_equal("userdata", type(ret_ud)) -- we got a msg_ud
 		assert.are_equal(#msg_ud, #ret_ud) -- it used the message we passed it
 		ret_ud = nil
 	end)
 
 	it("given an nml_msg, it can parse the msgpack encoded data and turn it into a lua table.", function()
-		msg_ud = messagelib.message()
+		msg_ud = new_message()
 		local ret_ud = msgpack.packmessage(msg_ud, test_table)
 		
 		ret_table = msgpack.unpackmessage(ret_ud)

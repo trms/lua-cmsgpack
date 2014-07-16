@@ -32,11 +32,9 @@
     <ClCompile Include="lua_cmsgpack.c" />
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="core_msg.lua">
-      <FileType>Document</FileType>
-    </CustomBuild>
     <None Include="lua-cmsgpack.autopkg" />
     <None Include="packages.config" />
+    <None Include="spec\core_msgpack.lua" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{8A71E637-11A7-413B-B2F8-A25AA1A56520}</ProjectGuid>
@@ -130,6 +128,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -144,6 +143,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
@@ -173,7 +173,7 @@
     <Error Condition="!Exists('packages\busted.2.0.0.5\build\native\busted.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\busted.2.0.0.5\build\native\busted.targets'))" />
   </Target>
   <ItemGroup>
-    <LuaTests Include="$(SolutionDir)core_msg.lua" />
+    <LuaTests Include="$(SolutionDir)spec\core_msgpack.lua" />
   </ItemGroup>
   <Target Name="AfterBuild" AfterTargets="Build">
     <Copy SourceFiles="@(LuaTests)" DestinationFolder="$(OutDir)" />
