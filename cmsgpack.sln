@@ -5,6 +5,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cmsgpack", "cmsgpack.vcxpro
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{1D8B0702-12EC-4E3F-8AD1-F00B3CBE8D47}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "message", "message\message.vcxproj", "{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -21,6 +23,14 @@ Global
 		{8A71E637-11A7-413B-B2F8-A25AA1A56520}.Release|Win32.Build.0 = Release|Win32
 		{8A71E637-11A7-413B-B2F8-A25AA1A56520}.Release|x64.ActiveCfg = Release|x64
 		{8A71E637-11A7-413B-B2F8-A25AA1A56520}.Release|x64.Build.0 = Release|x64
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Debug|Win32.Build.0 = Debug|Win32
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Debug|x64.ActiveCfg = Debug|x64
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Debug|x64.Build.0 = Debug|x64
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Release|Win32.ActiveCfg = Release|Win32
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Release|Win32.Build.0 = Release|Win32
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Release|x64.ActiveCfg = Release|x64
+		{7496C9E5-BD45-47AF-8254-D06DEB4B4B19}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

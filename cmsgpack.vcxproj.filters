@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="spec">
+      <UniqueIdentifier>{1f14284d-7128-4169-8ee0-0e1c4cbaafb8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="lua_cmsgpack.c">
@@ -22,5 +25,10 @@
   <ItemGroup>
     <None Include="lua-cmsgpack.autopkg" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="core_msg.lua">
+      <Filter>spec</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>

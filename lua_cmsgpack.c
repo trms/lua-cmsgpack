@@ -57,22 +57,91 @@ static void memrevifle(void *ptr, size_t len) {
     }
 }
 
+int dump_stack (lua_State *L, const char * msg)
+{
+   int i;
+   int top = lua_gettop(L); /*depth of the stack*/
+
+   printf("\n%s:\n--------\n", msg ? msg : "Dumping stack: ");
+   for(i= 1; i <= top; i++) {
+      int t = lua_type(L, i);
+      printf("%d:\t", i);
+      switch(t){
+      case LUA_TSTRING:  /* strings */
+         printf("'%s'", lua_tostring(L,i));
+         break;
+      case LUA_TBOOLEAN:  /*boolean values*/
+         printf(lua_toboolean(L,i) ? "true" : "false");
+         break;
+      case LUA_TNUMBER:  /* numbers */
+         printf("%g", lua_tonumber(L, i));
+         break;
+      case LUA_TUSERDATA:
+         printf("%s - 0x%08X", lua_typename(L,t), lua_touserdata(L, i));
+         break;
+      case LUA_TLIGHTUSERDATA:
+         printf("lightuserdata - 0x%08X", lua_touserdata(L, i));
+         break;
+      default:  /*anything else*/
+         printf("%s", lua_typename(L,t));
+         break;
+      }
+      printf("\n"); /* put in a separator */
+   }
+   printf("--------\n"); /* end of listing separator */
+   return 0;
+}
+
 /* ----------------------------- String buffer ----------------------------------
  * This is a simple implementation of string buffers. The only opereation
  * supported is creating empty buffers and appending bytes to it.
  * The string buffer uses 2x preallocation on every realloc for O(N) append
  * behavior.  */
 
+static void* l_alloc(lua_State* L, size_t _Size)
+{
+   luaL_getmetafield(L, 1, "alloc");
+   lua_pushvalue(L, 1);
+   lua_pushinteger(L, _Size);
+   lua_call(L, 2, 1);
+   // it modified our current ud, so just look it up here
+   lua_pop(L, 1);
+   return *(void**)lua_touserdata(L, 1);
+}
+
+static void* l_realloc(lua_State* L, size_t _NewSize)
+{
+   luaL_getmetafield(L, 1, "realloc");
+   lua_pushvalue(L, 1);
+   lua_pushinteger(L, _NewSize);
+   lua_call(L, 2, 1);
+   // it modified our current ud, so just look it up here
+   lua_pop(L, 1);
+   return *(void**)lua_touserdata(L, 1);
+}
+
+static void l_free(lua_State* L, void * _Memory)
+{
+   luaL_getmetafield(L, 1, "free");
+   lua_pushvalue(L, 1);
+   lua_pushlightuserdata(L, _Memory);
+   lua_call(L, 2, 1);
+   // reset our ud payload
+   *(void**)lua_touserdata(L, 1)=NULL;
+}
+
 typedef struct mp_buf {
     unsigned char *b;
     size_t len, free;
+    lua_State* L;
 } mp_buf;
 
-static mp_buf *mp_buf_new(void) {
+static mp_buf *mp_buf_new(lua_State* L) {
     mp_buf *buf = malloc(sizeof(*buf));
     
     buf->b = NULL;
     buf->len = buf->free = 0;
+    buf->L = L;
     return buf;
 }
 
@@ -80,8 +149,11 @@ void mp_buf_append(mp_buf *buf, const unsigned char *s, size_t len) {
     if (buf->free < len) {
         size_t newlen = buf->len+len;
 
-        buf->b = realloc(buf->b,newlen*2);
-        buf->free = newlen;
+      if (buf->L)
+         buf->b = l_realloc(buf->L,newlen*2);
+      else
+         buf->b = realloc(buf->b,newlen*2);
+      buf->free = newlen;
     }
     memcpy(buf->b+buf->len,s,len);
     buf->len += len;
@@ -89,7 +161,9 @@ void mp_buf_append(mp_buf *buf, const unsigned char *s, size_t len) {
 }
 
 void mp_buf_free(mp_buf *buf) {
-    free(buf->b);
+   // only free the data payload if the allocator is local
+   if (buf->L==NULL)
+      free(buf->b);
     free(buf);
 }
 
@@ -524,13 +598,36 @@ static void mp_encode_lua_type(lua_State *L, mp_buf *buf, int level) {
     lua_pop(L,1);
 }
 
-static int mp_pack(lua_State *L) {
-    mp_buf *buf = mp_buf_new();
+static int _mp_pack(lua_State* L, lua_State* bufL) {
+   mp_buf *buf;
 
-    mp_encode_lua_type(L,buf,0);
-    lua_pushlstring(L,(char*)buf->b,buf->len);
-    mp_buf_free(buf);
-    return 1;
+   // the message should be on top of the stack, with its allocators...
+   // if not we'll use the default allocators
+   buf = mp_buf_new(bufL);
+
+   mp_encode_lua_type(L,buf,0);
+   if (bufL==NULL)
+      lua_pushlstring(L,(char*)buf->b,buf->len);
+   else {
+      // update the size to compensate for O(n)
+      luaL_getmetafield(L, 1, "setsize");
+      lua_pushvalue(L, 1);
+      lua_pushinteger(L, buf->len);
+      lua_call(L, 2, 0);
+   }
+   mp_buf_free(buf);
+
+   return 1;
+}
+
+static int mp_pack(lua_State *L) {
+   return _mp_pack(L, NULL);
+}
+
+static int mp_packmessage(lua_State *L) {
+   int res;
+   res = _mp_pack(L, L);
+   return res;
 }
 
 /* --------------------------------- Decoding --------------------------------- */
@@ -857,17 +954,10 @@ void mp_decode_to_lua_type(lua_State *L, mp_cur *c) {
     }
 }
 
-static int mp_unpack(lua_State *L) {
-    size_t len;
-    const unsigned char *s;
+static int _mp_unpack(lua_State *L, const char* data, size_t len) {
+    const unsigned char *s = data;
     mp_cur *c;
 
-    if (!lua_isstring(L,-1)) {
-        lua_pushstring(L,"MessagePack decoding needs a string as input.");
-        lua_error(L);
-    }
-
-    s = (const unsigned char*) lua_tolstring(L,-1,&len);
     c = mp_cur_new(s,len);
     mp_decode_to_lua_type(L,c);
     
@@ -889,6 +979,35 @@ static int mp_unpack(lua_State *L) {
     return 1;
 }
 
+static int mp_unpack(lua_State *L)
+{
+   size_t len;
+   const unsigned char *s;
+
+   if (!lua_isstring(L,-1)) {
+      lua_pushstring(L,"MessagePack decoding needs a string as input.");
+      lua_error(L);
+   }
+
+   s = (const unsigned char*) lua_tolstring(L,-1,&len);
+   
+   return _mp_unpack(L, s, len);
+}
+
+static int mp_unpackmessage(lua_State *L) 
+{
+  size_t len;
+  void** ppv = (void**)lua_touserdata(L, -1);
+  void* data = *ppv;
+
+   // use the # operator
+   lua_len(L, 1);
+   len = lua_tointeger(L, -1);
+   lua_pop(L, 1);
+
+   return _mp_unpack(L, data, len);
+}
+
 /* ---------------------------------------------------------------------------- */
 
 #if LUA_VERSION_NUM < 502
@@ -898,6 +1017,8 @@ static const struct luaL_Reg thislib[] = {
 #endif
     {"pack", mp_pack},
     {"unpack", mp_unpack},
+    {"packmessage", mp_packmessage},
+    {"unpackmessage", mp_unpackmessage},
     {NULL, NULL}
 };
 
