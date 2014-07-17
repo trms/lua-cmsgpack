@@ -1,6 +1,7 @@
-/*
-lua message C library
-used to test the lua-cmsgpack module
+/***
+lua message C library used to test the lua-cmsgpack module.
+Can also be used as a guideline as to what MessagePack needs from the supplied message userdata object.
+@module message
 */
 
 #include <malloc.h>
@@ -81,6 +82,14 @@ int l_alloc(lua_State* L)
    return 1;
 }
 
+/***
+Changes the size of the message's userdata payload.
+Acts similarly as a typical realloc call.
+@function realloc
+@param msg_ud the message userdata object.
+@tparam integer size the new size in bytes
+@return the message userdata object
+*/
 int l_realloc(lua_State* L)
 {
    void** ppck = (void**)luaL_checkudata(L, 1, g_achMessageType);
@@ -118,12 +127,30 @@ int l_free(lua_State* L)
    return 1;
 }
 
+/***
+Stores the message's userdata size. 
+This size can reflect either the total allocated size, or the encoded size inside the a larger allocated data payload.
+@function __len
+@param msg_ud the message userdata object
+@tparam integer size the size in bytes
+@return the message userdata object
+*/
 int l_len(lua_State* L)
 {
    luaL_getmetafield(L, 1, "len");
    return 1;
 }
 
+/***
+Sets the message's final packed size.
+The buffer may have been asked to allocate more memory than necessary in its alloc and realloc calls.
+SetSize gives the buffer the valid data size inside its allocated memory.
+The message should report the size specified in setsize whenever asked by MessagePack.
+@function setsize
+@param msg_ud the message userdata containing the MessagePack encoded data.
+@tparam integer size the final packed size
+@return msg_ud the message userdata
+*/
 int l_setsize(lua_State* L)
 {
    // stash the size

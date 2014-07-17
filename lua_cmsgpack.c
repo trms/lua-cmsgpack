@@ -13,6 +13,11 @@
 
 #define LUACMSGPACK_MAX_NESTING  16 /* Max tables nesting. */
 
+/***
+MessagePack implementation and bindings for Lua 5.3.
+@module cmsgpack
+*/
+
 /* ==============================================================================
  * MessagePack implementation and bindings for Lua 5.1/5.2.
  * Copyright(C) 2012 Salvatore Sanfilippo <antirez@gmail.com>
@@ -98,17 +103,6 @@ int dump_stack (lua_State *L, const char * msg)
  * The string buffer uses 2x preallocation on every realloc for O(N) append
  * behavior.  */
 
-static void* l_alloc(lua_State* L, size_t _Size)
-{
-   luaL_getmetafield(L, 1, "alloc");
-   lua_pushvalue(L, 1);
-   lua_pushinteger(L, _Size);
-   lua_call(L, 2, 1);
-   // it modified our current ud, so just look it up here
-   lua_pop(L, 1);
-   return *(void**)lua_touserdata(L, 1);
-}
-
 static void* l_realloc(lua_State* L, size_t _NewSize)
 {
    luaL_getmetafield(L, 1, "realloc");
@@ -120,14 +114,12 @@ static void* l_realloc(lua_State* L, size_t _NewSize)
    return *(void**)lua_touserdata(L, 1);
 }
 
-static void l_free(lua_State* L, void * _Memory)
+static void l_setsize(lua_State* L, size_t _NewSize)
 {
-   luaL_getmetafield(L, 1, "free");
+   luaL_getmetafield(L, 1, "setsize");
    lua_pushvalue(L, 1);
-   lua_pushlightuserdata(L, _Memory);
-   lua_call(L, 2, 1);
-   // reset our ud payload
-   *(void**)lua_touserdata(L, 1)=NULL;
+   lua_pushinteger(L, _NewSize);
+   lua_call(L, 2, 0);
 }
 
 typedef struct mp_buf {
@@ -608,22 +600,39 @@ static int _mp_pack(lua_State* L, lua_State* bufL) {
    mp_encode_lua_type(L,buf,0);
    if (bufL==NULL)
       lua_pushlstring(L,(char*)buf->b,buf->len);
-   else {
-      // update the size to compensate for O(n)
-      luaL_getmetafield(L, 1, "setsize");
-      lua_pushvalue(L, 1);
-      lua_pushinteger(L, buf->len);
-      lua_call(L, 2, 0);
-   }
+   else 
+      l_setsize(L, buf->len);
    mp_buf_free(buf);
 
    return 1;
 }
 
+/***
+Packs the parameters into a MessagePack buffer.
+The values to be packed should be put inside a table, else only the last value passed in parameter will be encoded.
+The MessagePack buffer is put inside a lua string.
+@function pack
+@tparam table table containing the values to encode
+@treturn string a MessagePack buffer inside a lua string.
+@see unpack
+*/
 static int mp_pack(lua_State *L) {
    return _mp_pack(L, NULL);
 }
 
+/***
+Packs the parameters into the supplied message userdata object.
+The supplied userdata object needs to support the following functions: realloc, setsize, and the __len operator (to report the encoded size).
+@function packmessage
+@param msg_ud the message userdata object
+@tparam tab table containing the values to encode
+@return the message userdata object with the enclosed encoded data types, or nil
+@return nil, or an error message
+@see unpackmessage
+@see message.realloc
+@see message.setsize
+@see message.__len
+*/
 static int mp_packmessage(lua_State *L) {
    int res;
    res = _mp_pack(L, L);
@@ -978,7 +987,12 @@ static int _mp_unpack(lua_State *L, const char* data, size_t len) {
     }
     return 1;
 }
-
+/***
+Unpacks the MessagePack buffer to its original lua values.
+@function unpack
+@tparam string string buffer containing MessagePack-encoded data.
+@return the decoded lua values.
+*/
 static int mp_unpack(lua_State *L)
 {
    size_t len;
@@ -994,6 +1008,13 @@ static int mp_unpack(lua_State *L)
    return _mp_unpack(L, s, len);
 }
 
+/***
+Unpacks the MessagePack userdata buffer to its original lua values.
+The userdata is not freed by MessagePack.
+@function unpackmessage
+@param msg_ud MessagePack userdata buffer.
+@return the decoded lua values.
+*/
 static int mp_unpackmessage(lua_State *L) 
 {
   size_t len;
@@ -1038,7 +1059,7 @@ LUALIB_API int luaopen_cmsgpack(lua_State *L) {
     return 1;
 }
 
-/******************************************************************************
+/*
 * Copyright (C) 2012 Salvatore Sanfilippo.  All rights reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining
@@ -1059,4 +1080,4 @@ LUALIB_API int luaopen_cmsgpack(lua_State *L) {
 * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-******************************************************************************/
+*/
