@@ -1,0 +1,105 @@
+nuget {
+	nuspec {
+		id = lua-cmsgpack;
+		title: lua-cmsgpack - nanomsg module for Lua;
+		version: 0.3.2.13;
+		authors: {coapp, Salvatore Sanfilippo, Tightrope Media Systems};
+		owners: {Tightrope Media Systems};
+		licenseUrl: "http://opensource.org/licenses/MIT";
+		releaseNotes: {"Includes changes to support userdata. Updated to Work 3"}; 
+		requireLicenseAcceptance:false;
+		summary: "A self contained Lua MessagePack C implementation.";
+		copyright: "Copyright (C) 2012 Salvatore Sanfilippo.  All rights reserved.";
+		tags: {native, Lua, module, msgpack};
+		description: {@"Lua-cmsgpack is a MessagePack implementation and bindings for 
+		Lua 5.1/5.2 in a self contained C file without external dependencies.";}
+	};
+
+	dependencies {
+        // This node defines any outside items which may be needed to consume this package.
+        packages : {
+            // This is a list of other NuGet packages required to use this package.
+            // Each item follows the format "<pkg_name>/<version>"
+            lua/"[5.3, 5.4)",
+        };
+    };
+
+	files {
+		docs : {
+			#destination = {"${d_docs}\lua-cmsgpack"};
+			{".\*.md"};
+		};
+		
+		lua_dll: { 
+            // copies the whole folder tree.
+            #add-all-files : Items.cmsgpackDll;
+            // set the destination in the package itself. 
+			#destination : ${build_root}\${conditionFolder}\cmsgpackDll;
+        };
+		
+		lua: { 
+            // copies the whole folder tree.
+            #add-all-files : Items.cmsgpackLua;
+            // set the destination in the package itself. 
+			#destination : ${build_root}\${conditionFolder}\cmsgpackLua;
+        };
+		
+		mypdb: { 
+            // copies the whole folder tree.
+            #add-all-files : Items.cmsgpackPdb;
+            // set the destination in the package itself. 
+			#destination : ${build_root}\${conditionFolder}\cmsgpackPdb;
+        };
+		
+		lua: .\cmsgpack\init.lua;
+		
+		[x64, v100, Release] {
+			lua_dll: .\x64\Release\cmsgpack\core.dll;
+        	mypdb: x64\Release\cmsgpack\core.pdb;
+        };
+		
+		[x64, v100, Debug] {
+        	lua_dll: .\x64\Debug\cmsgpack\core.dll;
+        	mypdb: x64\Debug\cmsgpack\core.pdb;
+        };
+		
+        [win32, v100, Release] {
+			lua_dll: .\win32\Release\cmsgpack\core.dll;
+        	mypdb: win32\Release\cmsgpack\core.pdb;
+        }
+		
+		[win32, v100, Debug] {
+        	lua_dll: .\win32\Debug\cmsgpack\core.dll;
+        	mypdb: win32\Debug\cmsgpack\core.pdb;
+        }
+    };
+	
+	targets {
+		AfterBuild {
+			.Copy {
+				DestinationFolder = "$(TargetDir)cmsgpack";
+				SourceFiles = "@(cmsgpackLua)";
+				SkipUnchangedFiles = true;
+				UseHardlinksIfPossible = true;
+			};
+		};
+		
+		AfterBuild {
+			.Copy {
+				DestinationFolder = "$(TargetDir)cmsgpack";
+				SourceFiles = "@(cmsgpackDll)";
+				SkipUnchangedFiles = true;
+				UseHardlinksIfPossible = true;
+			};
+		};
+		
+		AfterBuild {
+			.Copy {
+				DestinationFolder = "$(TargetDir)cmsgpack";
+				SourceFiles = "@(cmsgpackPdb)";
+				SkipUnchangedFiles = true;
+				UseHardlinksIfPossible = true;
+			};
+		};
+	}	
+}
